@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<flow name="dischargePatientFlow" doc:id="672b8a40-27c6-4987-8810-fb417b4dadc7" >
+		<logger level="INFO" doc:name="Logger" doc:id="f6b4cb49-9d2c-40c8-a1b9-14cbe5368f29" />
+		<set-variable value="#[attributes.uriParams.patientId]" doc:name="patientId" doc:id="79062147-5091-4d6b-af24-5db7605fbe77" variableName="patientId"/>
+		<http:request method="GET" doc:name="Request" doc:id="a1a49568-6b2c-401b-84ce-73bf7b1815ed" url='#["http://mule-hmd-patient.us-e2.cloudhub.io/api/retrievePatient/" ++ vars.patientId]'>
+			<http:headers><![CDATA[#[{
+	client_id:"5b26bb9613a9469cbc60826a3a8003aa",
+	client_secret:"27754828855c4663bf0476F5CD49e050"
+}]]]></http:headers>
+		</http:request>
+		<set-variable value="#[payload[0].hospId]" doc:name="hospId" doc:id="d1952cc5-ecde-4ae9-8a33-42aaf38c4dcb" variableName="hospId" />
+		<ee:transform doc:name="Transform Message" doc:id="378369d5-ccd8-4358-ac78-493f9b7faf01" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+  "patientId": vars.patientId
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<http:request method="DELETE" doc:name="Request" doc:id="8c47815b-1a78-46c5-8da5-ded452ed43dd" url='#["http://mule-hmd-patient.us-e2.cloudhub.io/api/deletePatient"]'>
+			<http:headers ><![CDATA[#[{
+	client_id:"5b26bb9613a9469cbc60826a3a8003aa",
+	client_secret:"27754828855c4663bf0476F5CD49e050"
+}]]]></http:headers>
+		</http:request>
+		<choice doc:name="Choice" doc:id="dec6ba9d-be04-4b9a-9406-3c16d493c505" >
+			<when expression='#[payload.message == "patient deleted"]'>
+				<flow-ref doc:name="Flow Reference" doc:id="f86a868f-c888-4684-b77e-5578a15514a6" name="addBedToHospital"/>
+				<choice doc:name="Choice" doc:id="1acf5485-dc83-4155-afea-7650f42c3927" >
+					<when expression='#[payload.message == "hospital updated"]'>
+						<ee:transform doc:name="Transform Message" doc:id="4d3a3dee-f788-4798-9521-5057881c074d" >
+							<ee:message >
+								<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+  "message": "patient is discharged from " ++ vars.hName ++ "(" ++ vars.hospId ++  ")"
+}]]></ee:set-payload>
+							</ee:message>
+						</ee:transform>
+					</when>
+				</choice>
+			</when>
+			<otherwise >
+				<ee:transform doc:name="Transform Message" doc:id="1136f44a-3061-44a2-9b61-4a8d298b093b" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"message" : "unable to delete patient/patient doesn't exist."
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</otherwise>
+		</choice>
+		<error-handler ref="common-error-handler" />
+	</flow>
+	<flow name="addBedToHospital" doc:id="1485e6b0-d7f7-4c83-a842-7fcef3484dc5" >
+		<http:request method="GET" doc:name="Request" doc:id="9ed1d3ff-a467-475a-a4d0-18e894a4b641" url='#["http://mule-hmd-hospital.us-e2.cloudhub.io/api/retrieveHospital/" ++ vars.hospId]'>
+			<http:headers ><![CDATA[#[{
+	client_id: "a7f38885277f487ba7295da9ae72d1c3",
+	client_secret: "1618496B54714FF4897DA572B03Aeb91"
+}]]]></http:headers>
+		</http:request>
+		<ee:transform doc:name="Transform Message" doc:id="24c6cc87-7e9c-4c0b-accc-b25b3150597b" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+  "address": payload.address,
+  "hospitalId": payload.hospitalId,
+  "numberOfBeds": payload.numberOfBeds + 1,
+  "hospitalName": payload.hospitalName
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<set-variable value="#[payload.hospitalName]" doc:name="hName" doc:id="68ffbe89-f459-4915-8576-ef65dde977b0" variableName="hName"/>
+		<http:request method="PATCH" doc:name="Request" doc:id="56499147-353e-45de-add9-337168abc8b0" url="http://mule-hmd-hospital.us-e2.cloudhub.io/api/updateHospital">
+			<http:headers ><![CDATA[#[{
+	client_id:"a7f38885277f487ba7295da9ae72d1c3",
+	client_secret:"1618496B54714FF4897DA572B03Aeb91"
+}]]]></http:headers>
+		</http:request>
+	</flow>
+</mule>

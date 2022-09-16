@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<flow name="sortHospitalFlow" doc:id="f8d9a495-1e5e-4e7b-87d0-0cf2a16666fa" >
+		<http:request method="GET" doc:name="Request" doc:id="00b33f9f-1475-432a-a50c-270d2d472eae" url='#["http://mule-hmd-hospital.us-e2.cloudhub.io/api/retrieveAllHospitals"]'>
+			<http:headers ><![CDATA[#[{
+	client_id: "a7f38885277f487ba7295da9ae72d1c3",
+    client_secret: "1618496B54714FF4897DA572B03Aeb91"
+}]]]></http:headers>
+		</http:request>
+		<ee:transform doc:name="Transform Message" doc:id="fe5f6449-f903-4ca1-a6eb-304891aab601" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload orderBy $.numberOfBeds]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>

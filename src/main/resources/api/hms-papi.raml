@@ -1,0 +1,50 @@
+#%RAML 1.0
+title: hms-papi
+
+mediaType: application/json
+
+uses:
+  mylib : exchange_modules/d2d97777-b4e2-416d-86db-77cd5a0da3e4/common-fragment/1.0.1/common-fragment.raml
+protocols:
+  - HTTP
+  - HTTPS
+
+types:
+  AdminRequest: !include /dataTypes/AdminRequestDataType.raml
+  AdminResponse: !include /dataTypes/AdminResponseDataType.raml 
+  DischargeResponse: !include /dataTypes/DischargeDataType.raml
+  SortHospResponse: !include /dataTypes/SortHospResponseDataType.raml
+
+/admitPatient:
+  is: [mylib.common-error, mylib.client-id-secret-required]
+  post:
+    body:
+      application/json:
+        type: AdminRequest
+          
+    responses:
+      201:
+        body:
+          application/json:
+            type: AdminResponse
+    
+
+/dischargePatient/{patientId}:
+  is: [mylib.common-error, mylib.client-id-secret-required]
+  delete:
+    responses:
+      200:
+        body:
+          application/json:
+            type: DischargeResponse
+
+/sortHospitals:
+  is: [mylib.common-error, mylib.client-id-secret-required]
+  get:
+    responses:
+      200:
+        body:
+          application/json:
+            type: SortHospResponse
+
+

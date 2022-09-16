@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd 
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+	<flow name="admitPatientFlow" doc:id="853561a9-a5f7-4b0b-80ba-98826c64a950" >
+		<flow-ref doc:name="check Bed Availibility" doc:id="c065fe9a-0a82-4b73-a05e-54a2ff064d5e" name="checkBedAvailibility"/>
+		<choice doc:name="Choice" doc:id="312fbdc5-cd70-49ed-8dfa-ccc9767a07f3" >
+			<when expression="#[payload]">
+				<flow-ref doc:name="createPatient" doc:id="71ca69c2-b5f6-4c86-ae5a-029aa504c474" name="createPatient"/>
+			</when>
+			<otherwise >
+				<ee:transform doc:name="Transform Message" doc:id="d63fc25b-3666-475d-967d-a908a82ae75a" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"message" : "beds not available in " ++ vars.hospName ++ "(" ++ vars.hospId ++ ")"
+} ]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<set-variable value="#[false]" doc:name="bedAvailable" doc:id="503c9a51-c191-4a02-aad5-91899cc80d9f" variableName="bedAvailable"/>
+				<set-variable value="#[false]" doc:name="isPatientCreated" doc:id="0ab0191e-e208-48d2-9f51-474105634dcc" variableName="isPatientCreated"/>
+			</otherwise>
+		</choice>
+		<choice>
+			<when expression="#[vars.isPatientCreated]">
+				<flow-ref doc:name="subtractBedFromHospital" doc:id="f83828c8-614e-4fe3-8034-cf87694c6870" name="subtractBedFromHospital"/>
+			</when>
+			<when expression="#[vars.bedAvailable == false]">
+				<logger level="INFO" doc:name="Logger" doc:id="a96b7af8-8b60-4521-8342-bbe22e159f63" />
+			</when>
+			<otherwise >
+				<ee:transform doc:name="Transform Message" doc:id="fa358478-dfe7-4ecc-b604-2a32d9ecb864" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"message" : "unable to update bed in " ++ vars.hospName ++ "(" ++ vars.hospId ++ ")"
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</otherwise>
+		</choice>
+		<choice doc:name="Choice" doc:id="f4da4bdb-ab40-4f49-bd27-84aa3ac3bf32" >
+			<when expression='#[attributes.statusCode == 201]'>
+				<flow-ref doc:name="updatePatientToAdmit" doc:id="9739c95c-e594-4969-8479-b46497ef49bf" name="updatePatientToAdmit"/>
+			</when>
+		</choice>
+	</flow>
+	<flow name="subtractBedFromHospital" doc:id="2394e0b0-e985-4fc9-bdb6-08f50f38ae4f" >
+		<http:request method="GET" doc:name="Request" doc:id="0e52261c-e042-4cad-881e-99a3853d37b9" url='#["http://mule-hmd-hospita.us-e2.cloudhub.io/api/retrieveHospital/" ++ vars.hospId]'>
+			<http:headers ><![CDATA[#[{
+	client_id: "a7f38885277f487ba7295da9ae72d1c3",
+	client_secret: "1618496B54714FF4897DA572B03Aeb91"
+}]]]></http:headers>
+		</http:request>
+		<ee:transform doc:name="Transform Message" doc:id="e03fc61a-799e-4cd2-b737-678bc305bb99" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+  "address": payload.address,
+  "hospitalId": payload.hospitalId,
+  "numberOfBeds": payload.numberOfBeds - 1,
+  "hospitalName": payload.hospitalName
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<set-variable value="#[payload.hospitalName]" doc:name="hName" doc:id="e966c6c9-c8fd-44e1-872a-17661047f6d2" variableName="hName"/>
+		<http:request method="PATCH" doc:name="Request" doc:id="0b903b2a-e351-4110-b28b-b19b4485078a" url="http://hospital-sapi.us-e2.cloudhub.io/api/updateHospital">
+			<http:headers ><![CDATA[#[{
+	client_id:"a7f38885277f487ba7295da9ae72d1c3",
+	client_secret:"1618496B54714FF4897DA572B03Aeb91"
+}]]]></http:headers>
+		</http:request>
+	</flow>
+	<flow name="checkBedAvailibility" doc:id="cdb2cb21-f7e5-4647-a87e-6f632c7423da" >
+		<set-variable value="#[payload.hospitalId]" doc:name="hospId" doc:id="d4219caf-df0c-4263-a943-dd9de94e1aa5" variableName="hospId"/>
+		<set-variable value="#[payload.patientId]" doc:name="pId" doc:id="be66786b-cf57-4039-8033-bd4b3f822a86" variableName="pId"/>
+		<ee:transform doc:name="patientDetails" doc:id="22509174-bd87-463f-92b7-ae45b1c42606">
+			<ee:message>
+			</ee:message>
+			<ee:variables>
+				<ee:set-variable variableName="patientDetails"><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<http:request method="GET" doc:name="Request" doc:id="9f57c35e-f522-4822-b764-21c777e5434a" url='#["http://mule-hmd-hospital.us-e2.cloudhub.io/api/retrieveHospital/" ++ vars.hospId]'>
+			<http:headers ><![CDATA[#[{
+	client_id: "a7f38885277f487ba7295da9ae72d1c3",
+	client_secret: "1618496B54714FF4897DA572B03Aeb91"
+}]]]></http:headers>
+		</http:request>
+		<ee:transform doc:name="Transform Message" doc:id="0a06c831-e25a-413f-90d2-30306456b15b" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+if(payload.numberOfBeds > 0)
+	true
+else
+	false]]></ee:set-payload>
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="hospName" ><![CDATA[%dw 2.0
+output application/java
+---
+payload.hospitalName]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+	</flow>
+	<flow name="createPatient" doc:id="bc9feea5-fdf1-4ce5-a4e8-7708b3581787" >
+		<http:request method="POST" doc:name="Request" doc:id="6a644a9c-9fdc-422d-81d3-6f76e3bc6070" url="http://mule-hmd-patient.us-e2.cloudhub.io/api/createPatient">
+			<http:body ><![CDATA[#[vars.patientDetails]]]></http:body>
+			<http:headers ><![CDATA[#[{
+	client_id:"5b26bb9613a9469cbc60826a3a8003aa",
+	client_secret:"27754828855c4663bf0476F5CD49e050"
+}]]]></http:headers>
+		</http:request>
+		<choice doc:name="Choice" doc:id="b83900bf-7bc8-4eff-ac89-c33bde58603b" >
+			<when expression='#[payload.message == "patient created"]'>
+				<set-variable value="#[true]" doc:name="isPatientCreated" doc:id="30ce776c-742d-493d-b344-2181922b7800" variableName="isPatientCreated"/>
+			</when>
+			<otherwise >
+				<set-variable value="#[false]" doc:name="isPatientCreated" doc:id="22423ccf-71cc-4e00-bdc5-6e4b98fde21b" variableName="isPatientCreated"/>
+			</otherwise>
+		</choice>
+		<error-handler >
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="1ca330c4-c719-4b2e-a7ae-109ca0935adb" >
+				<set-variable value="#[false]" doc:name="isPatientCreated" doc:id="10ecba34-f062-43ac-ba4a-a5e249398567" variableName="isPatientCreated"/>
+			</on-error-continue>
+		</error-handler>
+	</flow>
+	<flow name="updatePatientToAdmit" doc:id="a6f71142-d6c3-458f-ae53-79a9f5005993" >
+		<http:request method="GET" doc:name="Request" doc:id="79713844-7620-4bda-846e-6b16cf48405f" url='#["http://mule-hmd-patient.us-e2.cloudhub.io/api/retrievePatient/" ++ vars.pId]'>
+			<http:headers ><![CDATA[#[{
+	client_id:"5b26bb9613a9469cbc60826a3a8003aa",
+	client_secret:"27754828855c4663bf0476F5CD49e050"
+}]]]></http:headers>
+		</http:request>
+		<ee:transform doc:name="Transform Message" doc:id="02ebe057-d76a-43ed-9c69-6a34d49bdf48" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+(payload[0] mapObject (v,k,i) -> 
+	(if((k) as String == "admissionStatus")
+		"status" : "admitted"
+	else
+		(k) : v))
+ ++ "hospitalId" : vars.hospId]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<http:request method="PATCH" doc:name="Request" doc:id="d4183ea9-2bb6-456d-bdb5-bda1040a0670" url="http://mule-hmd-patient.us-e2.cloudhub.io/api/updatePatient">
+			<http:headers ><![CDATA[#[{
+	client_id:"5b26bb9613a9469cbc60826a3a8003aa",
+	client_secret:"27754828855c4663bf0476F5CD49e050"
+}]]]></http:headers>
+		</http:request>
+		<ee:transform doc:name="Transform Message" doc:id="ab26311f-29dc-4c53-97fe-df2e9a644875" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+  "message": "patient is admitted to " ++ vars.hName  ++ "(" ++ vars.hospId ++  ")"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>
